@@ -52,23 +52,7 @@
             <aside class="left-panel">
                 <div class="panel-section">
                     <h3>📦 物资储备</h3>
-                    <div class="resource-list">
-                        <div class="resource-item">
-                            <span>🍞 食物</span>
-                            <span id="foodCount">20</span>
-                        </div>
-                        <div class="resource-item">
-                            <span>🔋 电池</span>
-                            <span id="batteryCount">10</span>
-                        </div>
-                        <div class="resource-item">
-                            <span>🔧 零件</span>
-                            <span id="partsCount">5</span>
-                        </div>
-                        <div class="resource-item">
-                            <span>💊 药品</span>
-                            <span id="medicineCount">3</span>
-                        </div>
+                    <div class="resource-list" id="resourceList">
                     </div>
                 </div>
 
@@ -198,6 +182,28 @@
                 </div>
 
                 <div class="panel-section">
+                    <h3>🎚️ 物资安全线</h3>
+                    <div class="threshold-list">
+                        <div class="threshold-item">
+                            <span>🍞 食物安全线</span>
+                            <span class="threshold-value" id="foodThreshold">15</span>
+                        </div>
+                        <div class="threshold-item">
+                            <span>🔋 电池安全线</span>
+                            <span class="threshold-value" id="batteryThreshold">8</span>
+                        </div>
+                        <div class="threshold-item">
+                            <span>🔧 零件安全线</span>
+                            <span class="threshold-value" id="partsThreshold">4</span>
+                        </div>
+                        <div class="threshold-item">
+                            <span>💊 药品安全线</span>
+                            <span class="threshold-value" id="medicineThreshold">2</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-section">
                     <h3>🎛️ 阈值调整</h3>
                     <div class="threshold-adjust">
                         <label>电量警戒线: <span id="powerThresholdVal">20</span></label>
@@ -218,6 +224,22 @@
                     <div class="threshold-adjust">
                         <label>民心警戒线: <span id="moraleThresholdVal">30</span></label>
                         <input type="range" id="moraleThresholdSlider" min="0" max="100" value="30">
+                    </div>
+                    <div class="threshold-adjust">
+                        <label>🍞 食物安全线: <span id="foodThresholdVal">15</span></label>
+                        <input type="range" id="foodThresholdSlider" min="0" max="50" value="15">
+                    </div>
+                    <div class="threshold-adjust">
+                        <label>🔋 电池安全线: <span id="batteryThresholdVal">8</span></label>
+                        <input type="range" id="batteryThresholdSlider" min="0" max="30" value="8">
+                    </div>
+                    <div class="threshold-adjust">
+                        <label>🔧 零件安全线: <span id="partsThresholdVal">4</span></label>
+                        <input type="range" id="partsThresholdSlider" min="0" max="20" value="4">
+                    </div>
+                    <div class="threshold-adjust">
+                        <label>💊 药品安全线: <span id="medicineThresholdVal">2</span></label>
+                        <input type="range" id="medicineThresholdSlider" min="0" max="15" value="2">
                     </div>
                 </div>
 

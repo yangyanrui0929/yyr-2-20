@@ -26,13 +26,17 @@ class UndergroundRadioGame {
                 noise: 70,
                 rumor: 70,
                 fatigue: 70,
-                morale: 30
+                morale: 30,
+                food: 15,
+                battery: 8,
+                parts: 4,
+                medicine: 2
             },
             resources: {
-                food: 20,
-                battery: 10,
-                parts: 5,
-                medicine: 3
+                food: { quantity: 20, safeLine: 15, stress: 0 },
+                battery: { quantity: 10, safeLine: 8, stress: 0 },
+                parts: { quantity: 5, safeLine: 4, stress: 0 },
+                medicine: { quantity: 3, safeLine: 2, stress: 0 }
             },
             survivors: this.generateSurvivors(),
             equipment: JSON.parse(JSON.stringify(GameData.equipmentList)),
@@ -105,6 +109,7 @@ class UndergroundRadioGame {
         if (saved) {
             try {
                 this.gameState = JSON.parse(saved);
+                this.migrateGameState();
                 this.showEvent('读取存档', '成功读取游戏存档！', []);
             } catch (e) {
                 this.gameState = this.getDefaultState();
@@ -113,6 +118,40 @@ class UndergroundRadioGame {
             this.gameState = this.getDefaultState();
             this.generateDailyRumors();
         }
+    }
+
+    migrateGameState() {
+        const defaultState = this.getDefaultState();
+        
+        if (!this.gameState.thresholds.food) {
+            this.gameState.thresholds = {
+                ...defaultState.thresholds,
+                ...this.gameState.thresholds
+            };
+        }
+        
+        if (typeof this.gameState.resources.food === 'number') {
+            const oldResources = { ...this.gameState.resources };
+            this.gameState.resources = {
+                food: { quantity: oldResources.food || 0, safeLine: defaultState.thresholds.food, stress: 0 },
+                battery: { quantity: oldResources.battery || 0, safeLine: defaultState.thresholds.battery, stress: 0 },
+                parts: { quantity: oldResources.parts || 0, safeLine: defaultState.thresholds.parts, stress: 0 },
+                medicine: { quantity: oldResources.medicine || 0, safeLine: defaultState.thresholds.medicine, stress: 0 }
+            };
+        }
+        
+        Object.keys(defaultState.resources).forEach(key => {
+            if (!this.gameState.resources[key]) {
+                this.gameState.resources[key] = { ...defaultState.resources[key] };
+            } else if (typeof this.gameState.resources[key] === 'object') {
+                if (this.gameState.resources[key].stress === undefined) {
+                    this.gameState.resources[key].stress = 0;
+                }
+                if (this.gameState.resources[key].safeLine === undefined) {
+                    this.gameState.resources[key].safeLine = defaultState.resources[key].safeLine;
+                }
+            }
+        });
     }
 
     resetGame() {
@@ -146,6 +185,19 @@ class UndergroundRadioGame {
                 this.gameState.thresholds[stat] = parseInt(e.target.value);
                 valSpan.textContent = e.target.value;
                 this.renderStatus();
+            });
+        });
+
+        ['food', 'battery', 'parts', 'medicine'].forEach(res => {
+            const slider = document.getElementById(res + 'ThresholdSlider');
+            const valSpan = document.getElementById(res + 'ThresholdVal');
+            slider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                this.gameState.thresholds[res] = value;
+                this.gameState.resources[res].safeLine = value;
+                valSpan.textContent = value;
+                this.renderResources();
+                this.renderThresholds();
             });
         });
 
@@ -207,16 +259,82 @@ class UndergroundRadioGame {
 
     renderThresholds() {
         Object.keys(this.gameState.thresholds).forEach(stat => {
-            document.getElementById(stat + 'Threshold').textContent = this.gameState.thresholds[stat];
+            const thresholdEl = document.getElementById(stat + 'Threshold');
+            const sliderEl = document.getElementById(stat + 'ThresholdSlider');
+            const valSpanEl = document.getElementById(stat + 'ThresholdVal');
+            
+            if (thresholdEl) thresholdEl.textContent = this.gameState.thresholds[stat];
+            if (sliderEl) sliderEl.value = this.gameState.thresholds[stat];
+            if (valSpanEl) valSpanEl.textContent = this.gameState.thresholds[stat];
         });
     }
 
     renderResources() {
         const { resources } = this.gameState;
-        document.getElementById('foodCount').textContent = resources.food;
-        document.getElementById('batteryCount').textContent = resources.battery;
-        document.getElementById('partsCount').textContent = resources.parts;
-        document.getElementById('medicineCount').textContent = resources.medicine;
+        const container = document.getElementById('resourceList');
+        container.innerHTML = '';
+
+        const resourceConfig = [
+            { key: 'food', icon: '🍞', name: '食物', color: '#f1c40f', maxDisplay: 30 },
+            { key: 'battery', icon: '🔋', name: '电池', color: '#3498db', maxDisplay: 20 },
+            { key: 'parts', icon: '🔧', name: '零件', color: '#95a5a6', maxDisplay: 15 },
+            { key: 'medicine', icon: '💊', name: '药品', color: '#e74c3c', maxDisplay: 10 }
+        ];
+
+        resourceConfig.forEach(config => {
+            const resource = resources[config.key];
+            const isLow = resource.quantity < resource.safeLine;
+            const shortage = Math.max(0, resource.safeLine - resource.quantity);
+            const stressLevel = Math.min(100, resource.stress);
+            
+            const quantityPercent = Math.min(100, (resource.quantity / config.maxDisplay) * 100);
+            const safeLinePercent = Math.min(100, (resource.safeLine / config.maxDisplay) * 100);
+            
+            let stressClass = 'stress-normal';
+            let stressDesc = '心态平稳';
+            if (stressLevel >= 60) {
+                stressClass = 'stress-high';
+                stressDesc = '严重焦虑';
+            } else if (stressLevel >= 30) {
+                stressClass = 'stress-medium';
+                stressDesc = '轻微不安';
+            }
+
+            const item = document.createElement('div');
+            item.className = `resource-card ${isLow ? 'warning' : ''}`;
+            item.innerHTML = `
+                <div class="resource-header">
+                    <span class="resource-icon">${config.icon}</span>
+                    <span class="resource-name">${config.name}</span>
+                    <span class="resource-quantity ${isLow ? 'low' : ''}">${resource.quantity}</span>
+                </div>
+                <div class="resource-bar-container">
+                    <div class="resource-bar">
+                        <div class="resource-bar-fill" style="width:${quantityPercent}%; background:${config.color}"></div>
+                        <div class="resource-safe-line" style="left:${safeLinePercent}%"></div>
+                    </div>
+                    <div class="resource-bar-labels">
+                        <span>0</span>
+                        <span class="safe-label" style="left:${safeLinePercent}%">安全线 ${resource.safeLine}</span>
+                        <span>${config.maxDisplay}</span>
+                    </div>
+                </div>
+                <div class="resource-stress">
+                    <div class="stress-header">
+                        <span>心理压力</span>
+                        <span class="${stressClass}">${stressDesc}</span>
+                    </div>
+                    <div class="stress-bar">
+                        <div class="stress-bar-fill ${stressClass}" style="width:${stressLevel}%"></div>
+                    </div>
+                    <div class="stress-info">
+                        ${isLow ? `<span class="shortage-info">⚠️ 短缺 ${shortage} 单位</span>` : '<span class="safe-info">✓ 储量充足</span>'}
+                        <span class="stress-value">${Math.round(stressLevel)}%</span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(item);
+        });
     }
 
     renderSurvivors() {
@@ -487,7 +605,8 @@ class UndergroundRadioGame {
             trust: '🤝信任',
             food: '🍞食物',
             battery: '🔋电池',
-            parts: '🔧零件'
+            parts: '🔧零件',
+            medicine: '💊药品'
         };
         return names[stat] || stat;
     }
@@ -525,14 +644,20 @@ class UndergroundRadioGame {
             return;
         }
 
-        this.applyEffects(msg.effects);
+        const multiplier = this.getBroadcastSensitivityMultiplier(msg.id);
+        const adjustedEffects = {};
+        Object.entries(msg.effects).forEach(([k, v]) => {
+            adjustedEffects[k] = Math.round(v * multiplier);
+        });
+
+        this.applyEffects(adjustedEffects);
         this.gameState.status.power -= msg.power;
         this.gameState.todayActions.broadcastDone = true;
 
-        const effectTags = Object.entries(msg.effects)
+        const effectTags = Object.entries(adjustedEffects)
             .filter(([_, v]) => v !== 0)
             .map(([k, v]) => ({
-                text: `${this.getStatName(k)} ${v > 0 ? '+' : ''}${v}`,
+                text: `${this.getStatName(k)} ${v > 0 ? '+' : ''}${v}${multiplier > 1.1 ? ' (敏感×' + multiplier.toFixed(1) + ')' : ''}`,
                 type: v > 0 ? 'positive' : 'negative'
             }));
 
@@ -597,12 +722,12 @@ class UndergroundRadioGame {
         
         if (!equipment || !survivor) return;
 
-        if (this.gameState.resources.parts < equipment.repairCost) {
+        if (this.gameState.resources.parts.quantity < equipment.repairCost) {
             this.showEvent('零件不足', '没有足够的零件进行维修！', [{ text: '🔧零件不足', type: 'negative' }]);
             return;
         }
 
-        this.gameState.resources.parts -= equipment.repairCost;
+        this.gameState.resources.parts.quantity -= equipment.repairCost;
         
         const repairBonus = survivor.skill === '维修' ? 15 : 0;
         const repairAmount = 25 + repairBonus;
@@ -664,9 +789,95 @@ class UndergroundRadioGame {
             } else if (this.gameState.status[key] !== undefined) {
                 this.gameState.status[key] = Math.max(0, Math.min(100, this.gameState.status[key] + value));
             } else if (this.gameState.resources[key] !== undefined) {
-                this.gameState.resources[key] = Math.max(0, this.gameState.resources[key] + value);
+                this.gameState.resources[key].quantity = Math.max(0, this.gameState.resources[key].quantity + value);
             }
         });
+    }
+
+    calculateResourceStress() {
+        const { resources } = this.gameState;
+        const stressEffects = {
+            fatigue: 0,
+            morale: 0,
+            rumor: 0
+        };
+
+        const resourceImpacts = {
+            food: { fatigueFactor: 0.8, moraleFactor: 1.2, rumorFactor: 0.6, name: '食物' },
+            battery: { fatigueFactor: 0.5, moraleFactor: 0.8, rumorFactor: 0.4, name: '电池' },
+            parts: { fatigueFactor: 0.3, moraleFactor: 0.4, rumorFactor: 0.2, name: '零件' },
+            medicine: { fatigueFactor: 0.6, moraleFactor: 1.0, rumorFactor: 0.8, name: '药品' }
+        };
+
+        Object.entries(resources).forEach(([key, resource]) => {
+            const impact = resourceImpacts[key];
+            if (!impact) return;
+
+            const shortage = Math.max(0, resource.safeLine - resource.quantity);
+            const ratio = resource.safeLine > 0 ? shortage / resource.safeLine : 0;
+            
+            const dailyStressIncrease = ratio * 25;
+            const stressDecay = resource.quantity >= resource.safeLine ? 15 : 5;
+            resource.stress = Math.max(0, Math.min(100, resource.stress + dailyStressIncrease - stressDecay));
+
+            if (resource.stress > 0) {
+                const stressRatio = resource.stress / 100;
+                stressEffects.fatigue += Math.round(stressRatio * impact.fatigueFactor * 8);
+                stressEffects.morale -= Math.round(stressRatio * impact.moraleFactor * 6);
+                stressEffects.rumor += Math.round(stressRatio * impact.rumorFactor * 10);
+            }
+        });
+
+        return stressEffects;
+    }
+
+    getStressSummary() {
+        const { resources } = this.gameState;
+        const summary = [];
+        
+        Object.entries(resources).forEach(([key, resource]) => {
+            if (resource.quantity < resource.safeLine) {
+                const shortage = resource.safeLine - resource.quantity;
+                summary.push(`${this.getStatName(key)}短缺${shortage}单位`);
+            }
+        });
+        
+        return summary.length > 0 ? summary.join('、') : null;
+    }
+
+    getBroadcastSensitivityMultiplier(broadcastId) {
+        const { resources } = this.gameState;
+        let multiplier = 1.0;
+        let totalStress = 0;
+
+        Object.values(resources).forEach(r => {
+            totalStress += r.stress;
+        });
+        const avgStress = totalStress / 4;
+
+        const resourceRelatedBroadcasts = {
+            food_depot: 'food',
+            water_supply: 'food',
+            medical_help: 'medicine',
+            power_restore: 'battery',
+            safe_zone: 'food',
+            rescue_team: 'medicine'
+        };
+
+        const relatedResource = resourceRelatedBroadcasts[broadcastId];
+        if (relatedResource && resources[relatedResource]) {
+            const resource = resources[relatedResource];
+            if (resource.quantity < resource.safeLine) {
+                const shortageRatio = 1 + (resource.stress / 100);
+                multiplier *= shortageRatio;
+            }
+        }
+
+        if (avgStress > 30) {
+            multiplier *= 1 + (avgStress / 200);
+        }
+
+        return Math.min(2.5, multiplier);
     }
 
     generateDailyRumors() {
@@ -708,7 +919,7 @@ class UndergroundRadioGame {
 
         const survivorCount = this.gameState.survivors.length;
         dayEffects.food -= survivorCount;
-        this.gameState.resources.food += dayEffects.food;
+        this.gameState.resources.food.quantity += dayEffects.food;
 
         this.gameState.survivors.forEach(s => {
             if (s.fatigue > 0) {
@@ -750,13 +961,17 @@ class UndergroundRadioGame {
             });
         }
 
-        if (this.gameState.resources.food < 0) {
-            dayEffects.morale -= 20;
-            this.gameState.resources.food = 0;
+        if (this.gameState.resources.food.quantity < 0) {
+            this.gameState.resources.food.quantity = 0;
             this.gameState.survivors.forEach(s => {
                 s.health -= 10;
             });
         }
+
+        const stressEffects = this.calculateResourceStress();
+        dayEffects.fatigue += stressEffects.fatigue;
+        dayEffects.morale += stressEffects.morale;
+        dayEffects.rumor += stressEffects.rumor;
 
         Object.entries(dayEffects).forEach(([k, v]) => {
             if (k !== 'food' && this.gameState.status[k] !== undefined) {
@@ -764,10 +979,15 @@ class UndergroundRadioGame {
             }
         });
 
+        const stressSummary = this.getStressSummary();
         let summary = '正常';
         if (this.gameState.status.morale <= 20) summary = '危急';
         else if (this.gameState.status.morale <= 40) summary = '堪忧';
         else if (this.gameState.status.morale >= 80) summary = '良好';
+        
+        if (stressSummary) {
+            summary += ' - ' + stressSummary + '引发焦虑';
+        }
 
         this.gameState.settlementHistory.push({
             day: this.gameState.day,
@@ -795,20 +1015,20 @@ class UndergroundRadioGame {
         });
 
         if (Math.random() < 0.3) {
-            this.gameState.resources.parts += Math.floor(Math.random() * 3) + 1;
+            this.gameState.resources.parts.quantity += Math.floor(Math.random() * 3) + 1;
         }
         if (Math.random() < 0.3) {
-            this.gameState.resources.battery += Math.floor(Math.random() * 2) + 1;
+            this.gameState.resources.battery.quantity += Math.floor(Math.random() * 2) + 1;
         }
         if (Math.random() < 0.2) {
-            this.gameState.resources.food += Math.floor(Math.random() * 5) + 2;
+            this.gameState.resources.food.quantity += Math.floor(Math.random() * 5) + 2;
         }
 
         if (this.gameState.status.morale <= 0) {
             this.gameOver('民心崩溃', '广播站失去了所有听众的信任，人们不再相信你了...');
             return;
         }
-        if (this.gameState.status.power <= 0 && this.gameState.resources.battery <= 0) {
+        if (this.gameState.status.power <= 0 && this.gameState.resources.battery.quantity <= 0) {
             this.gameOver('电力耗尽', '所有电力来源都已耗尽，广播站陷入了黑暗...');
             return;
         }
