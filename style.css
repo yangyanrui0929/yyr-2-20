@@ -369,6 +369,54 @@ body {
     color: #2ecc71;
 }
 
+.survivor-mood {
+    float: right;
+    font-size: 16px;
+}
+
+.survivor-anxiety {
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.anxiety-medium {
+    background: rgba(241, 196, 15, 0.2);
+    color: #f1c40f;
+}
+
+.anxiety-high {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f39c12;
+}
+
+.anxiety-severe {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+    animation: anxietyPulse 1.5s infinite;
+}
+
+@keyframes anxietyPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.survivor-card.anxious-medium {
+    border-left-color: #f1c40f;
+}
+
+.survivor-card.anxious-high {
+    border-left-color: #f39c12;
+}
+
+.survivor-card.anxious-severe {
+    border-left-color: #e74c3c;
+    box-shadow: 0 0 8px rgba(231, 76, 60, 0.3);
+}
+
 .district-trust {
     display: flex;
     flex-direction: column;

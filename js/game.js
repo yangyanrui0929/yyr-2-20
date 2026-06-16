@@ -344,18 +344,28 @@ class UndergroundRadioGame {
         container.innerHTML = '';
         repairSelect.innerHTML = '';
 
+        const anxiety = this.getOverallAnxiety();
+
         this.gameState.survivors.forEach(survivor => {
             const card = document.createElement('div');
             card.className = 'survivor-card';
             if (survivor.fatigue >= 70) card.classList.add('exhausted');
             else if (survivor.fatigue >= 40) card.classList.add('tired');
 
+            if (anxiety.level !== 'calm') {
+                card.classList.add('anxious-' + anxiety.level);
+            }
+
             card.innerHTML = `
-                <div class="survivor-name">${survivor.name} <small style="color:#888">[${survivor.skill}]</small></div>
+                <div class="survivor-name">
+                    ${survivor.name} <small style="color:#888">[${survivor.skill}]</small>
+                    <span class="survivor-mood" title="${anxiety.label}">${anxiety.icon}</span>
+                </div>
                 <div class="survivor-stats">
                     <span>❤️ ${survivor.health}%</span>
                     <span>😴 ${survivor.fatigue}%</span>
                 </div>
+                ${anxiety.level !== 'calm' ? `<div class="survivor-anxiety anxiety-${anxiety.level}">${anxiety.label} (压力 ${anxiety.avgStress}%)</div>` : ''}
                 ${survivor.task ? `<div class="survivor-task">${survivor.task}</div>` : ''}
             `;
             container.appendChild(card);
@@ -845,15 +855,54 @@ class UndergroundRadioGame {
         return summary.length > 0 ? summary.join('、') : null;
     }
 
-    getBroadcastSensitivityMultiplier(broadcastId) {
+    getOverallAnxiety() {
         const { resources } = this.gameState;
-        let multiplier = 1.0;
         let totalStress = 0;
+        let count = 0;
 
         Object.values(resources).forEach(r => {
             totalStress += r.stress;
+            count++;
         });
-        const avgStress = totalStress / 4;
+
+        const avgStress = count > 0 ? totalStress / count : 0;
+
+        let level = 'calm';
+        let label = '心态平稳';
+        let icon = '😊';
+
+        if (avgStress >= 60) {
+            level = 'severe';
+            label = '严重焦虑';
+            icon = '😰';
+        } else if (avgStress >= 40) {
+            level = 'high';
+            label = '焦虑不安';
+            icon = '😟';
+        } else if (avgStress >= 20) {
+            level = 'medium';
+            label = '轻微担忧';
+            icon = '😐';
+        }
+
+        return { level, label, icon, avgStress: Math.round(avgStress) };
+    }
+
+    getBroadcastSensitivityMultiplier(broadcastId) {
+        const { resources } = this.gameState;
+        let multiplier = 1.0;
+        let totalShortageRatio = 0;
+        let resourceCount = 0;
+
+        Object.values(resources).forEach(r => {
+            if (r.safeLine > 0) {
+                const shortage = Math.max(0, r.safeLine - r.quantity);
+                const ratio = shortage / r.safeLine;
+                totalShortageRatio += ratio;
+                resourceCount++;
+            }
+        });
+        const avgShortageRatio = resourceCount > 0 ? totalShortageRatio / resourceCount : 0;
 
         const resourceRelatedBroadcasts = {
             food_depot: 'food',
@@ -867,14 +916,16 @@ class UndergroundRadioGame {
         const relatedResource = resourceRelatedBroadcasts[broadcastId];
         if (relatedResource && resources[relatedResource]) {
             const resource = resources[relatedResource];
-            if (resource.quantity < resource.safeLine) {
-                const shortageRatio = 1 + (resource.stress / 100);
-                multiplier *= shortageRatio;
+            if (resource.quantity < resource.safeLine && resource.safeLine > 0) {
+                const shortage = resource.safeLine - resource.quantity;
+                const shortageRatio = shortage / resource.safeLine;
+                const stressBonus = resource.stress / 100;
+                multiplier *= 1 + shortageRatio * 0.8 + stressBonus * 0.4;
             }
         }
 
-        if (avgStress > 30) {
-            multiplier *= 1 + (avgStress / 200);
+        if (avgShortageRatio > 0.2) {
+            multiplier *= 1 + (avgShortageRatio * 0.5);
         }
 
         return Math.min(2.5, multiplier);
@@ -963,9 +1014,6 @@ class UndergroundRadioGame {
 
         if (this.gameState.resources.food.quantity < 0) {
             this.gameState.resources.food.quantity = 0;
-            this.gameState.survivors.forEach(s => {
-                s.health -= 10;
-            });
         }
 
         const stressEffects = this.calculateResourceStress();
